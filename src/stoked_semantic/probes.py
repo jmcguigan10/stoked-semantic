@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from itertools import combinations
 from dataclasses import dataclass
 import math
 
@@ -14,6 +15,7 @@ from stoked_semantic.utils import parameter_count
 
 class BaseProbe(nn.Module, ABC):
     probe_name: str
+    probe_family: str
 
     @abstractmethod
     def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
@@ -30,47 +32,70 @@ class BaseProbe(nn.Module, ABC):
         return source, target
 
     @staticmethod
-    def query_triplet(nodes: Tensor, query_indices: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+    def query_nodes(nodes: Tensor, query_indices: Tensor) -> Tensor:
+        batch_indices = torch.arange(nodes.shape[0], device=nodes.device).unsqueeze(1)
+        return nodes[batch_indices, query_indices]
+
+    @staticmethod
+    def query_context(nodes: Tensor, query_indices: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         batch_indices = torch.arange(nodes.shape[0], device=nodes.device)
         source_indices = query_indices[:, 0]
         target_indices = query_indices[:, 1]
-        other_indices = 3 - source_indices - target_indices
         source = nodes[batch_indices, source_indices]
         target = nodes[batch_indices, target_indices]
-        other = nodes[batch_indices, other_indices]
-        return source, target, other
+        slot_indices = torch.arange(nodes.shape[1], device=nodes.device).unsqueeze(0).expand_as(nodes[..., 0])
+        other_mask = (slot_indices != source_indices.unsqueeze(1)) & (
+            slot_indices != target_indices.unsqueeze(1)
+        )
+        other_nodes = nodes[other_mask].view(nodes.shape[0], -1, nodes.shape[-1])
+        context = other_nodes.mean(dim=1)
+        return source, target, context
+
+    @staticmethod
+    def pairwise_differences(query_nodes: Tensor) -> Tensor:
+        pair_features = [
+            query_nodes[:, right, :] - query_nodes[:, left, :]
+            for left, right in combinations(range(query_nodes.shape[1]), 2)
+        ]
+        return torch.cat(pair_features, dim=-1)
 
 
 class QueryOnlyProbe(BaseProbe):
     probe_name = "query_only"
 
-    def __init__(self, hidden: int, n_classes: int):
+    def __init__(self, hidden: int, n_classes: int, node_count: int, query_arity: int):
         super().__init__()
-        self.source_embedding = nn.Embedding(3, hidden)
-        self.target_embedding = nn.Embedding(3, hidden)
-        self.out = nn.Linear(2 * hidden, n_classes)
+        self.query_embeddings = nn.ModuleList(
+            nn.Embedding(node_count, hidden) for _ in range(query_arity)
+        )
+        self.out = nn.Linear(query_arity * hidden, n_classes)
 
     def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
-        source = self.source_embedding(query_indices[:, 0])
-        target = self.target_embedding(query_indices[:, 1])
-        return self.out(torch.cat([source, target], dim=-1))
+        pieces = [
+            embedding(query_indices[:, position])
+            for position, embedding in enumerate(self.query_embeddings)
+        ]
+        return self.out(torch.cat(pieces, dim=-1))
 
 
 class ExactProbe(BaseProbe):
     probe_name = "exact"
 
-    def __init__(self, d_model: int, rank: int, n_classes: int):
+    def __init__(self, d_model: int, rank: int, n_classes: int, query_arity: int):
         super().__init__()
+        self.query_arity = query_arity
+        self.query_pairs = tuple(combinations(range(query_arity), 2))
         self.to_phi = nn.Linear(d_model, rank, bias=False)
-        self.out = nn.Linear(rank, n_classes)
+        self.out = nn.Linear(len(self.query_pairs) * rank, n_classes)
 
     def node_potentials(self, nodes: Tensor) -> Tensor:
         return self.to_phi(nodes)
 
     def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
         potentials = self.node_potentials(nodes)
-        source, target = self.query_pair(potentials, query_indices)
-        return self.out(target - source)
+        query_potentials = self.query_nodes(potentials, query_indices)
+        features = self.pairwise_differences(query_potentials)
+        return self.out(features)
 
     def oriented_edge_tensor(self, nodes: Tensor) -> Tensor:
         potentials = self.node_potentials(nodes)
@@ -80,14 +105,16 @@ class ExactProbe(BaseProbe):
 class PairwiseProbe(BaseProbe):
     probe_name = "pairwise"
 
-    def __init__(self, d_model: int, rank: int, n_classes: int, hidden: int = 128):
+    def __init__(self, d_model: int, rank: int, n_classes: int, query_arity: int, hidden: int = 128):
         super().__init__()
+        self.query_arity = query_arity
+        self.query_pairs = tuple(combinations(range(query_arity), 2))
         self.edge = nn.Sequential(
             nn.Linear(4 * d_model, hidden),
             nn.GELU(),
             nn.Linear(hidden, rank),
         )
-        self.out = nn.Linear(rank, n_classes)
+        self.out = nn.Linear(len(self.query_pairs) * rank, n_classes)
 
     def pair_feat(self, ha: Tensor, hb: Tensor) -> Tensor:
         return torch.cat([ha, hb, ha * hb, hb - ha], dim=-1)
@@ -96,15 +123,20 @@ class PairwiseProbe(BaseProbe):
         return self.edge(self.pair_feat(ha, hb))
 
     def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
-        source, target = self.query_pair(nodes, query_indices)
-        return self.out(self.edge_embedding(source, target))
+        query_nodes = self.query_nodes(nodes, query_indices)
+        features = [
+            self.edge_embedding(query_nodes[:, left, :], query_nodes[:, right, :])
+            for left, right in self.query_pairs
+        ]
+        return self.out(torch.cat(features, dim=-1))
 
     def oriented_edge_tensor(self, nodes: Tensor) -> Tensor:
         batch_size = nodes.shape[0]
+        node_count = nodes.shape[1]
         hidden_size = self.edge_embedding(nodes[:, 0, :], nodes[:, 1, :]).shape[-1]
-        omega = nodes.new_zeros((batch_size, 3, 3, hidden_size))
-        for source_index in range(3):
-            for target_index in range(3):
+        omega = nodes.new_zeros((batch_size, node_count, node_count, hidden_size))
+        for source_index in range(node_count):
+            for target_index in range(node_count):
                 if source_index == target_index:
                     continue
                 omega[:, source_index, target_index, :] = self.edge_embedding(
@@ -117,74 +149,215 @@ class PairwiseProbe(BaseProbe):
 class TriadicProbe(BaseProbe):
     probe_name = "triadic"
 
-    def __init__(self, d_model: int, rank: int, n_classes: int):
+    def __init__(self, d_model: int, rank: int, n_classes: int, query_arity: int):
         super().__init__()
+        self.query_arity = query_arity
         self.ui = nn.Linear(d_model, rank, bias=False)
         self.uj = nn.Linear(d_model, rank, bias=False)
         self.uk = nn.Linear(d_model, rank, bias=False)
-        self.query = nn.Linear(4 * d_model, rank, bias=False)
+        self.query = nn.Linear(query_arity * d_model, rank, bias=False)
         self.out = nn.Linear(2 * rank, n_classes)
 
     def pair_feat(self, ha: Tensor, hb: Tensor) -> Tensor:
         return torch.cat([ha, hb, ha * hb, hb - ha], dim=-1)
 
     def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
-        source, target, other = self.query_triplet(nodes, query_indices)
-        triadic = self.ui(source) * self.uj(target) * self.uk(other)
-        query_context = self.query(self.pair_feat(source, target))
+        if self.query_arity == 2:
+            source, target, context = self.query_context(nodes, query_indices)
+        elif self.query_arity == 3:
+            query_nodes = self.query_nodes(nodes, query_indices)
+            source = query_nodes[:, 0, :]
+            target = query_nodes[:, 1, :]
+            context = query_nodes[:, 2, :]
+        else:
+            raise ValueError(f"TriadicProbe only supports query arity 2 or 3, got {self.query_arity}")
+        triadic = self.ui(source) * self.uj(target) * self.uk(context)
+        query_context = self.query(self.query_nodes(nodes, query_indices).reshape(nodes.shape[0], -1))
         return self.out(torch.cat([query_context, triadic], dim=-1))
 
+
+class PairwisePlusTriadicProbe(BaseProbe):
+    probe_name = "pairwise_plus_triadic"
+
+    def __init__(
+        self,
+        d_model: int,
+        pairwise_rank: int,
+        triadic_rank: int,
+        n_classes: int,
+        query_arity: int,
+        hidden: int = 128,
+    ):
+        super().__init__()
+        self.query_arity = query_arity
+        self.query_pairs = tuple(combinations(range(query_arity), 2))
+        self.edge = nn.Sequential(
+            nn.Linear(4 * d_model, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, pairwise_rank),
+        )
+        self.ui = nn.Linear(d_model, triadic_rank, bias=False)
+        self.uj = nn.Linear(d_model, triadic_rank, bias=False)
+        self.uk = nn.Linear(d_model, triadic_rank, bias=False)
+        self.query = nn.Linear(query_arity * d_model, triadic_rank, bias=False)
+        self.out = nn.Linear(len(self.query_pairs) * pairwise_rank + 2 * triadic_rank, n_classes)
+
+    def pair_feat(self, ha: Tensor, hb: Tensor) -> Tensor:
+        return torch.cat([ha, hb, ha * hb, hb - ha], dim=-1)
+
+    def edge_embedding(self, ha: Tensor, hb: Tensor) -> Tensor:
+        return self.edge(self.pair_feat(ha, hb))
+
+    def forward(self, nodes: Tensor, query_indices: Tensor) -> Tensor:
+        query_nodes = self.query_nodes(nodes, query_indices)
+        pairwise_features = [
+            self.edge_embedding(query_nodes[:, left, :], query_nodes[:, right, :])
+            for left, right in self.query_pairs
+        ]
+        if self.query_arity == 2:
+            source, target, context = self.query_context(nodes, query_indices)
+        elif self.query_arity == 3:
+            source = query_nodes[:, 0, :]
+            target = query_nodes[:, 1, :]
+            context = query_nodes[:, 2, :]
+        else:
+            raise ValueError(
+                f"PairwisePlusTriadicProbe only supports query arity 2 or 3, got {self.query_arity}"
+            )
+        triadic = self.ui(source) * self.uj(target) * self.uk(context)
+        query_context = self.query(query_nodes.reshape(nodes.shape[0], -1))
+        features = torch.cat(pairwise_features + [query_context, triadic], dim=-1)
+        return self.out(features)
+
+    def oriented_edge_tensor(self, nodes: Tensor) -> Tensor:
+        batch_size = nodes.shape[0]
+        node_count = nodes.shape[1]
+        hidden_size = self.edge_embedding(nodes[:, 0, :], nodes[:, 1, :]).shape[-1]
+        omega = nodes.new_zeros((batch_size, node_count, node_count, hidden_size))
+        for source_index in range(node_count):
+            for target_index in range(node_count):
+                if source_index == target_index:
+                    continue
+                omega[:, source_index, target_index, :] = self.edge_embedding(
+                    nodes[:, source_index, :],
+                    nodes[:, target_index, :],
+                )
+        return omega
 
 @dataclass(frozen=True)
 class ProbeSpec:
     name: str
+    family: str
     rank: int
     hidden: int | None
+    aux_rank: int | None = None
 
 
 class ProbeFactory:
     def __init__(self, config: ProbeConfig):
         self.config = config
 
-    def specs(self, d_model: int) -> list[ProbeSpec]:
+    def specs(self, d_model: int, query_arity: int) -> list[ProbeSpec]:
+        exact_ranks = tuple(dict.fromkeys(self.config.exact_rank_sweep or (self.config.exact_rank,)))
         triadic_rank = self.config.triadic_rank
         if triadic_rank is None:
-            triadic_rank = self._match_triadic_rank(d_model=d_model)
-        return [
-            ProbeSpec(name="query_only", rank=self.config.exact_rank, hidden=None),
-            ProbeSpec(name="exact", rank=self.config.exact_rank, hidden=None),
-            ProbeSpec(name="pairwise", rank=self.config.pairwise_rank, hidden=self.config.pairwise_hidden),
-            ProbeSpec(name="triadic", rank=triadic_rank, hidden=None),
+            triadic_rank = self._match_triadic_rank(d_model=d_model, query_arity=query_arity)
+        specs = [
+            ProbeSpec(name="query_only", family="query_only", rank=self.config.exact_rank, hidden=None),
         ]
+        for rank in exact_ranks:
+            exact_name = "exact" if len(exact_ranks) == 1 else f"exact_r{rank}"
+            specs.append(
+                ProbeSpec(
+                    name=exact_name,
+                    family="exact",
+                    rank=rank,
+                    hidden=None,
+                )
+            )
+        specs.extend(
+            [
+                ProbeSpec(
+                    name="pairwise",
+                    family="pairwise",
+                    rank=self.config.pairwise_rank,
+                    hidden=self.config.pairwise_hidden,
+                ),
+                ProbeSpec(
+                    name="pairwise_plus_triadic",
+                    family="pairwise_plus_triadic",
+                    rank=self.config.pairwise_rank,
+                    hidden=self.config.pairwise_hidden,
+                    aux_rank=triadic_rank,
+                ),
+                ProbeSpec(name="triadic", family="triadic", rank=triadic_rank, hidden=None),
+            ]
+        )
+        return specs
 
-    def build(self, spec: ProbeSpec, d_model: int) -> BaseProbe:
-        if spec.name == "query_only":
-            return QueryOnlyProbe(hidden=spec.rank, n_classes=self.config.num_classes)
-        if spec.name == "exact":
-            return ExactProbe(d_model=d_model, rank=spec.rank, n_classes=self.config.num_classes)
-        if spec.name == "pairwise":
-            return PairwiseProbe(
+    def build(self, spec: ProbeSpec, d_model: int, node_count: int, query_arity: int) -> BaseProbe:
+        if spec.family == "query_only":
+            probe = QueryOnlyProbe(
+                hidden=spec.rank,
+                n_classes=self.config.num_classes,
+                node_count=node_count,
+                query_arity=query_arity,
+            )
+        elif spec.family == "exact":
+            probe = ExactProbe(
                 d_model=d_model,
                 rank=spec.rank,
                 n_classes=self.config.num_classes,
+                query_arity=query_arity,
+            )
+        elif spec.family == "pairwise":
+            probe = PairwiseProbe(
+                d_model=d_model,
+                rank=spec.rank,
+                n_classes=self.config.num_classes,
+                query_arity=query_arity,
                 hidden=spec.hidden or self.config.pairwise_hidden,
             )
-        if spec.name == "triadic":
-            return TriadicProbe(d_model=d_model, rank=spec.rank, n_classes=self.config.num_classes)
-        raise ValueError(f"Unsupported probe name: {spec.name}")
+        elif spec.family == "pairwise_plus_triadic":
+            probe = PairwisePlusTriadicProbe(
+                d_model=d_model,
+                pairwise_rank=spec.rank,
+                triadic_rank=spec.aux_rank or spec.rank,
+                n_classes=self.config.num_classes,
+                query_arity=query_arity,
+                hidden=spec.hidden or self.config.pairwise_hidden,
+            )
+        elif spec.family == "triadic":
+            probe = TriadicProbe(
+                d_model=d_model,
+                rank=spec.rank,
+                n_classes=self.config.num_classes,
+                query_arity=query_arity,
+            )
+        else:
+            raise ValueError(f"Unsupported probe family: {spec.family}")
+        probe.probe_name = spec.name
+        probe.probe_family = spec.family
+        return probe
 
-    def _match_triadic_rank(self, d_model: int) -> int:
+    def _match_triadic_rank(self, d_model: int, query_arity: int) -> int:
         pairwise = PairwiseProbe(
             d_model=d_model,
             rank=self.config.pairwise_rank,
             n_classes=self.config.num_classes,
+            query_arity=query_arity,
             hidden=self.config.pairwise_hidden,
         )
         pairwise_params = parameter_count(pairwise)
         best_rank = 8
         best_gap = math.inf
         for rank in range(8, 513):
-            triadic = TriadicProbe(d_model=d_model, rank=rank, n_classes=self.config.num_classes)
+            triadic = TriadicProbe(
+                d_model=d_model,
+                rank=rank,
+                n_classes=self.config.num_classes,
+                query_arity=query_arity,
+            )
             gap = abs(parameter_count(triadic) - pairwise_params)
             if gap < best_gap:
                 best_gap = gap

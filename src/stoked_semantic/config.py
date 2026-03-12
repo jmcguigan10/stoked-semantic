@@ -3,8 +3,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+PHASE1_TASK_SUITE = "phase1_order3"
+PHASE2_TASK_SUITE = "phase2_four_node"
+PHASE3_TASK_SUITE = "phase3_balanced_ternary"
+PHASE4_TASK_SUITE = "phase4_masked_balanced_ternary"
+
 DEFAULT_FEATURE_CACHE_DIR = Path(".cache/features")
 DEFAULT_RELATION_IDS = ("outranks",)
+PHASE2_DEFAULT_RELATION_IDS = (
+    "chain_order",
+    "same_side",
+    "same_row",
+)
+PHASE3_DEFAULT_RELATION_IDS = ("balanced_triplet",)
+PHASE4_DEFAULT_RELATION_IDS = ("masked_balanced_triplet",)
 DEFAULT_TEMPLATE_IDS = (
     "active_forward",
     "active_reverse",
@@ -22,6 +34,38 @@ DEFAULT_TEMPLATE_IDS = (
     "paraphrase_ab_inverse_reverse",
     "paraphrase_bc_inverse",
     "paraphrase_bc_inverse_reverse",
+)
+PHASE2_DEFAULT_TEMPLATE_IDS = (
+    "chain_forward",
+    "chain_reverse",
+    "team_forward",
+    "team_reverse",
+    "grid_rows_first",
+    "grid_columns_first",
+    "triplet_forward",
+    "triplet_reverse",
+)
+PHASE3_DEFAULT_TEMPLATE_IDS = (
+    "balanced_triplet_link_forward",
+    "balanced_triplet_link_reverse",
+    "balanced_triplet_sync_forward",
+    "balanced_triplet_sync_reverse",
+    "balanced_triplet_fit_forward",
+    "balanced_triplet_fit_reverse",
+    "balanced_triplet_align_forward",
+    "balanced_triplet_align_reverse",
+)
+PHASE3_STRUCTURAL_TRAIN_TEMPLATE_IDS = (
+    "balanced_triplet_link_forward",
+    "balanced_triplet_link_reverse",
+    "balanced_triplet_fit_forward",
+    "balanced_triplet_fit_reverse",
+)
+PHASE3_STRUCTURAL_TEST_TEMPLATE_IDS = (
+    "balanced_triplet_sync_forward",
+    "balanced_triplet_sync_reverse",
+    "balanced_triplet_align_forward",
+    "balanced_triplet_align_reverse",
 )
 STRUCTURAL_TRAIN_TEMPLATE_IDS = (
     "active_forward",
@@ -109,18 +153,39 @@ DEFAULT_TEST_NAMES = (
     "mallory",
     "nia",
 )
+PHASE3_TRAIN_NAMES = (
+    "alice",
+    "bob",
+    "carol",
+    "dave",
+    "erin",
+    "frank",
+    "grace",
+    "heidi",
+)
+PHASE3_TEST_NAMES = (
+    "ivan",
+    "judy",
+    "mallory",
+    "nia",
+    "oscar",
+    "peggy",
+)
+DEFAULT_MASKED_VISIBLE_CLAUSE_COUNTS = (5, 6, 7)
 
 
 @dataclass(frozen=True)
 class DataConfig:
-    relation_ids: tuple[str, ...] = DEFAULT_RELATION_IDS
+    task_suite: str = PHASE1_TASK_SUITE
+    relation_ids: tuple[str, ...] | None = None
     train_names: tuple[str, ...] = DEFAULT_TRAIN_NAMES
     test_names: tuple[str, ...] = DEFAULT_TEST_NAMES
-    train_template_ids: tuple[str, ...] = DEFAULT_TEMPLATE_IDS
-    test_template_ids: tuple[str, ...] = DEFAULT_TEMPLATE_IDS
+    train_template_ids: tuple[str, ...] | None = None
+    test_template_ids: tuple[str, ...] | None = None
     train_examples_per_label: int = 600
     test_examples_per_label: int = 72
     seed: int = 7
+    masked_visible_clause_counts: tuple[int, ...] = DEFAULT_MASKED_VISIBLE_CLAUSE_COUNTS
 
 
 @dataclass(frozen=True)
@@ -136,6 +201,7 @@ class EncoderConfig:
 @dataclass(frozen=True)
 class ProbeConfig:
     exact_rank: int = 64
+    exact_rank_sweep: tuple[int, ...] = ()
     pairwise_rank: int = 64
     pairwise_hidden: int = 128
     triadic_rank: int | None = None

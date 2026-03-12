@@ -15,6 +15,7 @@ class DiagnosticSummary:
     run_seed: int
     layer_index: int
     probe_name: str
+    diagnostic_family: str
     variant_name: str
     exactness_mean: float
     curl_energy_mean: float
@@ -25,8 +26,10 @@ class DiagnosticSummary:
 class DiagnosticAnalyzer:
     def __init__(self) -> None:
         self._incidence_cache: dict[int, tuple[Tensor, Tensor, list[tuple[int, int]]]] = {}
+        self.raw_projection_rank = 4
+        self.raw_skew_bilinear_rank = 8
 
-    def summarize(
+    def summarize_probe(
         self,
         probe: BaseProbe,
         features: LayerFeatures,
@@ -37,6 +40,52 @@ class DiagnosticAnalyzer:
 
         with torch.no_grad():
             omega = probe.oriented_edge_tensor(features.nodes)
+        return self._summarize_tensor(
+            run_seed=run_seed,
+            layer_index=features.layer_index,
+            probe_name=probe.probe_name,
+            diagnostic_family="probe",
+            variant_name=features.variant_name,
+            omega=omega,
+            positions=features.positions,
+        )
+
+    def summarize_raw(
+        self,
+        features: LayerFeatures,
+        run_seed: int,
+    ) -> list[DiagnosticSummary]:
+        return [
+            self._summarize_tensor(
+                run_seed=run_seed,
+                layer_index=features.layer_index,
+                probe_name=f"raw_projection_r{self.raw_projection_rank}",
+                diagnostic_family="raw_projection",
+                variant_name=features.variant_name,
+                omega=self._raw_projection_edges(features.nodes),
+                positions=features.positions,
+            ),
+            self._summarize_tensor(
+                run_seed=run_seed,
+                layer_index=features.layer_index,
+                probe_name=f"raw_skew_bilinear_r{self.raw_skew_bilinear_rank}",
+                diagnostic_family="raw_skew_bilinear",
+                variant_name=features.variant_name,
+                omega=self._raw_skew_bilinear_edges(features.nodes),
+                positions=features.positions,
+            ),
+        ]
+
+    def _summarize_tensor(
+        self,
+        run_seed: int,
+        layer_index: int,
+        probe_name: str,
+        diagnostic_family: str,
+        variant_name: str,
+        omega: Tensor,
+        positions: Tensor,
+    ) -> DiagnosticSummary:
         omega = self._antisymmetrize(omega)
 
         exactness_values: list[float] = []
@@ -46,7 +95,7 @@ class DiagnosticAnalyzer:
             exactness_values.append(stats["exactness"])
             curl_values.append(stats["curl_energy"])
 
-        centered = self._subtract_positional_means(omega=omega, positions=features.positions)
+        centered = self._subtract_positional_means(omega=omega, positions=positions)
         exactness_centered: list[float] = []
         curl_centered: list[float] = []
         for sample_index in range(centered.shape[0]):
@@ -56,9 +105,10 @@ class DiagnosticAnalyzer:
 
         return DiagnosticSummary(
             run_seed=run_seed,
-            layer_index=features.layer_index,
-            probe_name=probe.probe_name,
-            variant_name=features.variant_name,
+            layer_index=layer_index,
+            probe_name=probe_name,
+            diagnostic_family=diagnostic_family,
+            variant_name=variant_name,
             exactness_mean=sum(exactness_values) / len(exactness_values),
             curl_energy_mean=sum(curl_values) / len(curl_values),
             exactness_positional_mean=sum(exactness_centered) / len(exactness_centered),
@@ -91,6 +141,30 @@ class DiagnosticAnalyzer:
             "exactness": float(exactness.item()),
             "curl_energy": float(curl_energy.item()),
         }
+
+    def _raw_projection_edges(self, nodes: Tensor) -> Tensor:
+        directions = self._fixed_projection_directions(
+            hidden_size=nodes.shape[-1],
+            rank=self.raw_projection_rank,
+            device=nodes.device,
+            dtype=nodes.dtype,
+        )
+        projected = nodes @ directions
+        return projected[:, None, :, :] - projected[:, :, None, :]
+
+    def _raw_skew_bilinear_edges(self, nodes: Tensor) -> Tensor:
+        left, right = self._fixed_skew_factors(
+            hidden_size=nodes.shape[-1],
+            rank=self.raw_skew_bilinear_rank,
+            device=nodes.device,
+            dtype=nodes.dtype,
+        )
+        left_proj = nodes @ left
+        right_proj = nodes @ right
+        return (
+            left_proj[:, :, None, :] * right_proj[:, None, :, :]
+            - right_proj[:, :, None, :] * left_proj[:, None, :, :]
+        )
 
     def _subtract_positional_means(self, omega: Tensor, positions: Tensor) -> Tensor:
         centered = omega.clone()
@@ -135,6 +209,32 @@ class DiagnosticAnalyzer:
             self._incidence_cache[n] = (incidence, triangle_incidence, edges)
         incidence, triangle_incidence, edges = self._incidence_cache[n]
         return incidence.to(device=device, dtype=dtype), triangle_incidence.to(device=device, dtype=dtype), edges
+
+    def _fixed_projection_directions(
+        self,
+        hidden_size: int,
+        rank: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> Tensor:
+        generator = torch.Generator().manual_seed(17_291 + hidden_size * 31 + rank)
+        directions = torch.randn((hidden_size, rank), generator=generator, dtype=torch.float32)
+        directions = torch.nn.functional.normalize(directions, dim=0)
+        return directions.to(device=device, dtype=dtype)
+
+    def _fixed_skew_factors(
+        self,
+        hidden_size: int,
+        rank: int,
+        device: torch.device,
+        dtype: torch.dtype,
+    ) -> tuple[Tensor, Tensor]:
+        generator = torch.Generator().manual_seed(83_117 + hidden_size * 53 + rank)
+        left = torch.randn((hidden_size, rank), generator=generator, dtype=torch.float32)
+        right = torch.randn((hidden_size, rank), generator=generator, dtype=torch.float32)
+        left = torch.nn.functional.normalize(left, dim=0)
+        right = torch.nn.functional.normalize(right, dim=0)
+        return left.to(device=device, dtype=dtype), right.to(device=device, dtype=dtype)
 
     @staticmethod
     def _antisymmetrize(omega: Tensor) -> Tensor:

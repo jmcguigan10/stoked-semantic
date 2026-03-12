@@ -25,10 +25,14 @@ class LayerFeatures:
     positions: Tensor
     query_indices: Tensor
     example_ids: tuple[str, ...]
+    relation_ids: tuple[str, ...]
     template_ids: tuple[str, ...]
     template_family_ids: tuple[str, ...]
-    presented_entities: tuple[tuple[str, str, str], ...]
-    query_entities: tuple[tuple[str, str], ...]
+    query_distance_types: tuple[str, ...]
+    query_direction_types: tuple[str, ...]
+    query_types: tuple[str, ...]
+    presented_entities: tuple[tuple[str, ...], ...]
+    query_entities: tuple[tuple[str, ...], ...]
     variant_name: str
 
     @property
@@ -43,10 +47,14 @@ class EncodedSplit:
     example_ids: tuple[str, ...]
     premise_texts: tuple[str, ...]
     labels: Tensor
+    relation_ids: tuple[str, ...]
     template_ids: tuple[str, ...]
     template_family_ids: tuple[str, ...]
-    presented_entities: tuple[tuple[str, str, str], ...]
-    query_entities: tuple[tuple[str, str], ...]
+    query_distance_types: tuple[str, ...]
+    query_direction_types: tuple[str, ...]
+    query_types: tuple[str, ...]
+    presented_entities: tuple[tuple[str, ...], ...]
+    query_entities: tuple[tuple[str, ...], ...]
     pooled_hidden_states: Tensor
     positions: Tensor
     query_indices: Tensor
@@ -68,8 +76,12 @@ class EncodedSplit:
             positions=self.positions,
             query_indices=self.query_indices,
             example_ids=self.example_ids,
+            relation_ids=self.relation_ids,
             template_ids=self.template_ids,
             template_family_ids=self.template_family_ids,
+            query_distance_types=self.query_distance_types,
+            query_direction_types=self.query_direction_types,
+            query_types=self.query_types,
             presented_entities=self.presented_entities,
             query_entities=self.query_entities,
             variant_name=self.variant_name,
@@ -95,11 +107,35 @@ class FeatureCache:
             example_ids=tuple(payload["example_ids"]),
             premise_texts=tuple(payload["premise_texts"]),
             labels=payload["labels"],
+            relation_ids=tuple(
+                payload.get(
+                    "relation_ids",
+                    ["unknown"] * len(payload["example_ids"]),
+                )
+            ),
             template_ids=tuple(payload["template_ids"]),
             template_family_ids=tuple(
                 payload.get(
                     "template_family_ids",
                     [template_family_id_for(template_id) for template_id in payload["template_ids"]],
+                )
+            ),
+            query_distance_types=tuple(
+                payload.get(
+                    "query_distance_types",
+                    ["unknown"] * len(payload["example_ids"]),
+                )
+            ),
+            query_direction_types=tuple(
+                payload.get(
+                    "query_direction_types",
+                    ["unknown"] * len(payload["example_ids"]),
+                )
+            ),
+            query_types=tuple(
+                payload.get(
+                    "query_types",
+                    ["unknown"] * len(payload["example_ids"]),
                 )
             ),
             presented_entities=tuple(tuple(entities) for entities in payload["presented_entities"]),
@@ -123,8 +159,12 @@ class FeatureCache:
                 "example_ids": list(split.example_ids),
                 "premise_texts": list(split.premise_texts),
                 "labels": split.labels.cpu(),
+                "relation_ids": list(split.relation_ids),
                 "template_ids": list(split.template_ids),
                 "template_family_ids": list(split.template_family_ids),
+                "query_distance_types": list(split.query_distance_types),
+                "query_direction_types": list(split.query_direction_types),
+                "query_types": list(split.query_types),
                 "presented_entities": [list(entities) for entities in split.presented_entities],
                 "query_entities": [list(entities) for entities in split.query_entities],
                 "pooled_hidden_states": split.pooled_hidden_states.cpu(),
@@ -260,8 +300,12 @@ class TransformerFeatureExtractor:
             example_ids=tuple(example.example_id for example in examples),
             premise_texts=tuple(example.premise_text for example in examples),
             labels=torch.tensor([example.label for example in examples], dtype=torch.long),
+            relation_ids=tuple(example.relation_id for example in examples),
             template_ids=tuple(example.template_id for example in examples),
             template_family_ids=tuple(example.template_family_id for example in examples),
+            query_distance_types=tuple(example.query_distance_type for example in examples),
+            query_direction_types=tuple(example.query_direction_type for example in examples),
+            query_types=tuple(example.query_type for example in examples),
             presented_entities=tuple(example.presented_entities for example in examples),
             query_entities=tuple(example.query_entities for example in examples),
             pooled_hidden_states=torch.stack(all_hidden, dim=0),
@@ -305,29 +349,50 @@ class TransformerFeatureExtractor:
             "vocab.txt",
             "special_tokens_map.json",
             "pytorch_model.bin",
+            "pytorch_model-*.bin",
             "model.safetensors",
+            "model-*.safetensors",
             "pytorch_model.bin.index.json",
             "model.safetensors.index.json",
         ]
         try:
-            return snapshot_download(
+            snapshot_path = snapshot_download(
                 repo_id=self.config.model_name,
                 local_files_only=True,
                 allow_patterns=allow_patterns,
             )
+            if self._snapshot_has_weights(snapshot_path):
+                return snapshot_path
         except OSError:
-            return snapshot_download(
-                repo_id=self.config.model_name,
-                allow_patterns=allow_patterns,
-            )
+            pass
+        return snapshot_download(
+            repo_id=self.config.model_name,
+            allow_patterns=allow_patterns,
+        )
+
+    @staticmethod
+    def _snapshot_has_weights(snapshot_path: str) -> bool:
+        snapshot_dir = Path(snapshot_path)
+        weight_patterns = (
+            "pytorch_model.bin",
+            "pytorch_model-*.bin",
+            "model.safetensors",
+            "model-*.safetensors",
+        )
+        return any(any(snapshot_dir.glob(pattern)) for pattern in weight_patterns)
 
     def _cache_key(self, examples: list[PremiseQueryExample]) -> str:
         digest = hashlib.sha256()
+        digest.update(b"encoding_v5")
         digest.update(self.config.model_name.encode("utf-8"))
         digest.update(str(self.config.max_length).encode("utf-8"))
         digest.update(str(self.config.include_attentions).encode("utf-8"))
         for example in examples:
             digest.update(example.example_id.encode("utf-8"))
+            digest.update(example.premise_text.encode("utf-8"))
+            digest.update(str(example.label).encode("utf-8"))
+            digest.update(str(example.query_indices).encode("utf-8"))
+            digest.update(example.query_type.encode("utf-8"))
         return digest.hexdigest()[:16]
 
     def _pool_example(

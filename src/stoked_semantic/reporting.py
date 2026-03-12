@@ -27,11 +27,17 @@ SERIES_COLORS = {
     ("pretrained", "query_only"): CYBER_COLORS["gray"],
     ("pretrained", "exact"): CYBER_COLORS["cyan"],
     ("pretrained", "pairwise"): CYBER_COLORS["magenta"],
+    ("pretrained", "pairwise_plus_triadic"): CYBER_COLORS["lime"],
     ("pretrained", "triadic"): CYBER_COLORS["gold"],
+    ("pretrained", "raw_projection"): CYBER_COLORS["orange"],
+    ("pretrained", "raw_skew_bilinear"): CYBER_COLORS["violet"],
     ("random_control", "query_only"): "#4D5560",
     ("random_control", "exact"): CYBER_COLORS["lime"],
     ("random_control", "pairwise"): CYBER_COLORS["orange"],
+    ("random_control", "pairwise_plus_triadic"): "#7CFFB2",
     ("random_control", "triadic"): CYBER_COLORS["violet"],
+    ("random_control", "raw_projection"): "#9C5A00",
+    ("random_control", "raw_skew_bilinear"): "#9D7BFF",
 }
 
 
@@ -70,6 +76,7 @@ class ReportWriter:
                     "variant_name": result.variant_name,
                     "layer_index": result.layer_index,
                     "probe_name": result.probe_name,
+                    "probe_family": result.probe_family,
                     "rank": result.rank,
                     "num_parameters": result.num_parameters,
                     "train_accuracy": result.train_accuracy,
@@ -84,6 +91,7 @@ class ReportWriter:
                     "variant_name": summary.variant_name,
                     "layer_index": summary.layer_index,
                     "probe_name": summary.probe_name,
+                    "diagnostic_family": summary.diagnostic_family,
                     "exactness_mean": summary.exactness_mean,
                     "curl_energy_mean": summary.curl_energy_mean,
                     "exactness_positional_mean": summary.exactness_positional_mean,
@@ -177,6 +185,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "probe_family",
                     "rank",
                     "num_parameters",
                     "train_accuracy",
@@ -192,6 +201,7 @@ class ReportWriter:
                         "variant_name": result.variant_name,
                         "layer_index": result.layer_index,
                         "probe_name": result.probe_name,
+                        "probe_family": result.probe_family,
                         "rank": result.rank,
                         "num_parameters": result.num_parameters,
                         "train_accuracy": result.train_accuracy,
@@ -209,6 +219,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "diagnostic_family",
                     "exactness_mean",
                     "curl_energy_mean",
                     "exactness_positional_mean",
@@ -223,6 +234,7 @@ class ReportWriter:
                         "variant_name": summary.variant_name,
                         "layer_index": summary.layer_index,
                         "probe_name": summary.probe_name,
+                        "diagnostic_family": summary.diagnostic_family,
                         "exactness_mean": summary.exactness_mean,
                         "curl_energy_mean": summary.curl_energy_mean,
                         "exactness_positional_mean": summary.exactness_positional_mean,
@@ -239,6 +251,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "probe_family",
                     "group_type",
                     "group_name",
                     "example_count",
@@ -257,6 +270,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "probe_family",
                     "rank",
                     "num_parameters_mean",
                     "num_parameters_std",
@@ -280,6 +294,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "diagnostic_family",
                     "run_count",
                     "exactness_mean",
                     "exactness_std",
@@ -302,6 +317,7 @@ class ReportWriter:
                     "variant_name",
                     "layer_index",
                     "probe_name",
+                    "probe_family",
                     "group_type",
                     "group_name",
                     "run_count",
@@ -344,6 +360,7 @@ class ReportWriter:
                     "variant_name": variant_name,
                     "layer_index": layer_index,
                     "probe_name": probe_name,
+                    "probe_family": group[0].probe_family,
                     "rank": group[0].rank,
                     "num_parameters_mean": mean(result.num_parameters for result in group),
                     "num_parameters_std": self._std(result.num_parameters for result in group),
@@ -365,15 +382,23 @@ class ReportWriter:
     def _aggregate_diagnostics(self, diagnostics: list[DiagnosticSummary]) -> list[dict[str, Any]]:
         grouped: dict[tuple[str, int, str], list[DiagnosticSummary]] = defaultdict(list)
         for summary in diagnostics:
-            grouped[(summary.variant_name, summary.layer_index, summary.probe_name)].append(summary)
+            grouped[
+                (
+                    summary.variant_name,
+                    summary.layer_index,
+                    summary.probe_name,
+                    summary.diagnostic_family,
+                )
+            ].append(summary)
 
         rows: list[dict[str, Any]] = []
-        for (variant_name, layer_index, probe_name), group in sorted(grouped.items()):
+        for (variant_name, layer_index, probe_name, diagnostic_family), group in sorted(grouped.items()):
             rows.append(
                 {
                     "variant_name": variant_name,
                     "layer_index": layer_index,
                     "probe_name": probe_name,
+                    "diagnostic_family": diagnostic_family,
                     "run_count": len(group),
                     "exactness_mean": mean(item.exactness_mean for item in group),
                     "exactness_std": self._std(item.exactness_mean for item in group),
@@ -399,6 +424,7 @@ class ReportWriter:
                         "variant_name": result.variant_name,
                         "layer_index": result.layer_index,
                         "probe_name": result.probe_name,
+                        "probe_family": result.probe_family,
                         "group_type": group_evaluation.group_type,
                         "group_name": group_evaluation.group_name,
                         "example_count": group_evaluation.example_count,
@@ -431,6 +457,7 @@ class ReportWriter:
                     "variant_name": variant_name,
                     "layer_index": layer_index,
                     "probe_name": probe_name,
+                    "probe_family": group[0]["probe_family"],
                     "group_type": group_type,
                     "group_name": group_name,
                     "run_count": len(group),
@@ -456,12 +483,14 @@ class ReportWriter:
         fig, ax = plt.subplots(figsize=(9, 5))
         for (variant_name, probe_name), results in grouped.items():
             results = sorted(results, key=lambda item: item.layer_index)
+            style = self._series_style(probe_name=probe_name)
             self._plot_neon_line(
                 ax=ax,
                 xs=[result.layer_index for result in results],
                 ys=[result.test_accuracy for result in results],
                 color=self._series_color(variant_name=variant_name, probe_name=probe_name),
                 label=f"{variant_name}:{probe_name}",
+                linestyle=style["linestyle"],
             )
         self._style_axes(ax=ax, ylabel="Accuracy")
         ax.set_title("Probe Test Accuracy by Layer")
@@ -483,6 +512,7 @@ class ReportWriter:
         for (variant_name, probe_name), summaries in grouped.items():
             summaries = sorted(summaries, key=lambda item: item.layer_index)
             color = self._series_color(variant_name=variant_name, probe_name=probe_name)
+            style = self._series_style(probe_name=probe_name)
             label = f"{variant_name}:{probe_name}"
             xs = [summary.layer_index for summary in summaries]
             self._plot_neon_line(
@@ -491,6 +521,7 @@ class ReportWriter:
                 ys=[summary.exactness_mean for summary in summaries],
                 color=color,
                 label=label,
+                linestyle=style["linestyle"],
             )
             self._plot_neon_line(
                 ax=axes[1],
@@ -498,6 +529,7 @@ class ReportWriter:
                 ys=[summary.curl_energy_positional_mean for summary in summaries],
                 color=color,
                 label=label,
+                linestyle=style["linestyle"],
             )
 
         self._style_axes(ax=axes[0], ylabel="Exactness")
@@ -527,12 +559,14 @@ class ReportWriter:
         fig, ax = plt.subplots(figsize=(9, 5))
         for (variant_name, probe_name), results in grouped.items():
             results = sorted(results, key=lambda item: item.layer_index)
+            style = self._series_style(probe_name=probe_name)
             self._plot_neon_line(
                 ax=ax,
                 xs=[result.layer_index for result in results],
                 ys=[result.test_accuracy_polarity_invariant for result in results],
                 color=self._series_color(variant_name=variant_name, probe_name=probe_name),
                 label=f"{variant_name}:{probe_name}",
+                linestyle=style["linestyle"],
             )
         self._style_axes(ax=ax, ylabel="Polarity-Invariant Accuracy")
         ax.set_title("Probe Polarity-Invariant Accuracy by Layer")
@@ -552,6 +586,7 @@ class ReportWriter:
         for (variant_name, probe_name), rows in grouped.items():
             rows = sorted(rows, key=lambda item: item["layer_index"])
             color = self._series_color(variant_name=variant_name, probe_name=probe_name)
+            style = self._series_style(probe_name=probe_name)
             xs = [row["layer_index"] for row in rows]
             ys = [row["test_accuracy_mean"] for row in rows]
             errs = [row["test_accuracy_std"] for row in rows]
@@ -561,6 +596,7 @@ class ReportWriter:
                 ys=ys,
                 color=color,
                 label=f"{variant_name}:{probe_name}",
+                linestyle=style["linestyle"],
             )
             if any(err > 0 for err in errs):
                 lower = [max(0.0, y - err) for y, err in zip(ys, errs)]
@@ -586,14 +622,29 @@ class ReportWriter:
         for (variant_name, probe_name), rows in grouped.items():
             rows = sorted(rows, key=lambda item: item["layer_index"])
             color = self._series_color(variant_name=variant_name, probe_name=probe_name)
+            style = self._series_style(probe_name=probe_name)
             xs = [row["layer_index"] for row in rows]
             exact_mean = [row["exactness_mean"] for row in rows]
             exact_std = [row["exactness_std"] for row in rows]
             curl_mean = [row["curl_energy_positional_mean"] for row in rows]
             curl_std = [row["curl_energy_positional_std"] for row in rows]
             label = f"{variant_name}:{probe_name}"
-            self._plot_neon_line(ax=axes[0], xs=xs, ys=exact_mean, color=color, label=label)
-            self._plot_neon_line(ax=axes[1], xs=xs, ys=curl_mean, color=color, label=label)
+            self._plot_neon_line(
+                ax=axes[0],
+                xs=xs,
+                ys=exact_mean,
+                color=color,
+                label=label,
+                linestyle=style["linestyle"],
+            )
+            self._plot_neon_line(
+                ax=axes[1],
+                xs=xs,
+                ys=curl_mean,
+                color=color,
+                label=label,
+                linestyle=style["linestyle"],
+            )
             if any(err > 0 for err in exact_std):
                 lower = [max(0.0, y - err) for y, err in zip(exact_mean, exact_std)]
                 upper = [min(1.0, y + err) for y, err in zip(exact_mean, exact_std)]
@@ -631,6 +682,7 @@ class ReportWriter:
         for (variant_name, probe_name), rows in grouped.items():
             rows = sorted(rows, key=lambda item: item["layer_index"])
             color = self._series_color(variant_name=variant_name, probe_name=probe_name)
+            style = self._series_style(probe_name=probe_name)
             xs = [row["layer_index"] for row in rows]
             ys = [row["test_accuracy_polarity_invariant_mean"] for row in rows]
             errs = [row["test_accuracy_polarity_invariant_std"] for row in rows]
@@ -640,6 +692,7 @@ class ReportWriter:
                 ys=ys,
                 color=color,
                 label=f"{variant_name}:{probe_name}",
+                linestyle=style["linestyle"],
             )
             if any(err > 0 for err in errs):
                 lower = [max(0.0, y - err) for y, err in zip(ys, errs)]
@@ -687,7 +740,47 @@ class ReportWriter:
         )
 
     def _series_color(self, variant_name: str, probe_name: str) -> str:
-        return SERIES_COLORS.get((variant_name, probe_name), CYBER_COLORS["cyan"])
+        family = self._probe_family(probe_name)
+        return SERIES_COLORS.get((variant_name, family), CYBER_COLORS["cyan"])
+
+    @staticmethod
+    def _probe_family(probe_name: str) -> str:
+        if probe_name.startswith("exact"):
+            return "exact"
+        if probe_name.startswith("raw_projection"):
+            return "raw_projection"
+        if probe_name.startswith("raw_skew_bilinear"):
+            return "raw_skew_bilinear"
+        return probe_name
+
+    @staticmethod
+    def _series_style(probe_name: str) -> dict[str, Any]:
+        if probe_name.startswith("raw_projection"):
+            return {"linestyle": (0, (2, 1.2))}
+        if probe_name.startswith("raw_skew_bilinear"):
+            return {"linestyle": (0, (6, 1.5))}
+        if not probe_name.startswith("exact_r"):
+            return {"linestyle": "-"}
+        rank = ReportWriter._probe_rank(probe_name)
+        style_map = {
+            1: "-",
+            2: "--",
+            4: "-.",
+            8: ":",
+            16: (0, (5, 1.5)),
+            32: (0, (3, 1, 1, 1)),
+            64: (0, (7, 1.5)),
+        }
+        return {"linestyle": style_map.get(rank, (0, (2, 1.25)))}
+
+    @staticmethod
+    def _probe_rank(probe_name: str) -> int:
+        if "_r" not in probe_name:
+            return 0
+        try:
+            return int(probe_name.split("_r", maxsplit=1)[1])
+        except ValueError:
+            return 0
 
     @staticmethod
     def _plot_neon_line(
@@ -696,8 +789,18 @@ class ReportWriter:
         ys: list[float],
         color: str,
         label: str,
+        linestyle: str | tuple[Any, ...] = "-",
     ) -> None:
-        ax.plot(xs, ys, color=color, linewidth=4.0, alpha=0.10, solid_capstyle="round", zorder=1)
+        ax.plot(
+            xs,
+            ys,
+            color=color,
+            linewidth=4.0,
+            alpha=0.10,
+            solid_capstyle="round",
+            linestyle=linestyle,
+            zorder=1,
+        )
         ax.plot(
             xs,
             ys,
@@ -705,6 +808,7 @@ class ReportWriter:
             linewidth=1.45,
             label=label,
             solid_capstyle="round",
+            linestyle=linestyle,
             zorder=2,
         )
 

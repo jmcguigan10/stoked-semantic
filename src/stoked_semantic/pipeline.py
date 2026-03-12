@@ -9,7 +9,7 @@ from typing import Any
 from tqdm import tqdm
 
 from stoked_semantic.config import ExperimentConfig, ReportConfig
-from stoked_semantic.data import SyntheticConsistencyDatasetBuilder
+from stoked_semantic.data import make_dataset_builder
 from stoked_semantic.diagnostics import DiagnosticAnalyzer, DiagnosticSummary
 from stoked_semantic.encoding import EncodedSplit, TransformerFeatureExtractor
 from stoked_semantic.reporting import ReportWriter
@@ -44,7 +44,7 @@ class PhaseOnePipeline:
 
     def __init__(self, config: ExperimentConfig):
         self.config = config.with_rooted_paths()
-        self.dataset_builder = SyntheticConsistencyDatasetBuilder(self.config.data)
+        self.dataset_builder = make_dataset_builder(self.config.data)
         self.extractor = TransformerFeatureExtractor(self.config.encoder)
         self.trainer = ProbeTrainer(self.config.probe)
         self.diagnostics = DiagnosticAnalyzer()
@@ -112,25 +112,37 @@ class PhaseOnePipeline:
             )
             probe_results.extend(layer_results)
             for result in layer_results:
-                summary = self.diagnostics.summarize(
+                summary = self.diagnostics.summarize_probe(
                     probe=result.model,
                     features=layer_test,
                     run_seed=self.config.data.seed,
                 )
                 if summary is not None:
                     diagnostics.append(summary)
+            diagnostics.extend(
+                self.diagnostics.summarize_raw(
+                    features=layer_test,
+                    run_seed=self.config.data.seed,
+                )
+            )
         return probe_results, diagnostics
 
     def _metadata(self, artifacts: PhaseOneRunArtifacts) -> dict[str, Any]:
         return {
             "mode": "single_seed",
             "run_seed": artifacts.run_seed,
+            "task_suite": self.config.data.task_suite,
             "train_examples": artifacts.train_examples,
             "test_examples": artifacts.test_examples,
             "variants": artifacts.variants,
-            "relation_ids": list(self.config.data.relation_ids),
-            "train_template_ids": list(self.config.data.train_template_ids),
-            "test_template_ids": list(self.config.data.test_template_ids),
+            "relation_ids": list(self.config.data.relation_ids or ()),
+            "train_template_ids": list(self.config.data.train_template_ids or ()),
+            "test_template_ids": list(self.config.data.test_template_ids or ()),
+            "masked_visible_clause_counts": list(self.config.data.masked_visible_clause_counts),
+            "exact_rank": self.config.probe.exact_rank,
+            "exact_rank_sweep": list(self.config.probe.exact_rank_sweep),
+            "pairwise_rank": self.config.probe.pairwise_rank,
+            "triadic_rank": self.config.probe.triadic_rank,
             "output_dir": str(self.config.report.output_dir),
         }
 
@@ -192,9 +204,15 @@ class MultiSeedPhaseOnePipeline:
         return {
             "mode": "multi_seed",
             "run_seeds": list(self.run_seeds),
-            "relation_ids": list(self.config.data.relation_ids),
-            "train_template_ids": list(self.config.data.train_template_ids),
-            "test_template_ids": list(self.config.data.test_template_ids),
+            "task_suite": self.config.data.task_suite,
+            "relation_ids": list(self.config.data.relation_ids or ()),
+            "train_template_ids": list(self.config.data.train_template_ids or ()),
+            "test_template_ids": list(self.config.data.test_template_ids or ()),
+            "masked_visible_clause_counts": list(self.config.data.masked_visible_clause_counts),
+            "exact_rank": self.config.probe.exact_rank,
+            "exact_rank_sweep": list(self.config.probe.exact_rank_sweep),
+            "pairwise_rank": self.config.probe.pairwise_rank,
+            "triadic_rank": self.config.probe.triadic_rank,
             "output_dir": str(self.config.report.output_dir),
         }
 
@@ -267,6 +285,7 @@ class MultiSeedPhaseOnePipeline:
                     run_seed=int(row["run_seed"]),
                     layer_index=int(row["layer_index"]),
                     probe_name=row["probe_name"],
+                    probe_family=row.get("probe_family", _probe_family_from_name(row["probe_name"])),
                     variant_name=row["variant_name"],
                     model=None,  # loaded runs only need metrics for aggregation
                     train_accuracy=float(row["train_accuracy"]),
@@ -283,6 +302,7 @@ class MultiSeedPhaseOnePipeline:
                 run_seed=int(row["run_seed"]),
                 layer_index=int(row["layer_index"]),
                 probe_name=row["probe_name"],
+                diagnostic_family=row.get("diagnostic_family", "probe"),
                 variant_name=row["variant_name"],
                 exactness_mean=float(row["exactness_mean"]),
                 curl_energy_mean=float(row["curl_energy_mean"]),
@@ -301,3 +321,9 @@ class MultiSeedPhaseOnePipeline:
             probe_results=probe_results,
             diagnostic_results=diagnostic_results,
         )
+
+
+def _probe_family_from_name(probe_name: str) -> str:
+    if probe_name.startswith("exact"):
+        return "exact"
+    return probe_name

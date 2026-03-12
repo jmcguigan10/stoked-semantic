@@ -34,6 +34,7 @@ class ProbeRunResult:
     run_seed: int
     layer_index: int
     probe_name: str
+    probe_family: str
     variant_name: str
     model: BaseProbe
     train_accuracy: float
@@ -56,10 +57,17 @@ class ProbeTrainer:
         test_features: LayerFeatures,
     ) -> list[ProbeRunResult]:
         d_model = train_features.hidden_states.shape[-1]
+        node_count = train_features.hidden_states.shape[1]
+        query_arity = train_features.query_indices.shape[1]
         results: list[ProbeRunResult] = []
-        for spec in self.factory.specs(d_model=d_model):
+        for spec in self.factory.specs(d_model=d_model, query_arity=query_arity):
             set_seed(self.config.seed + train_features.layer_index)
-            model = self.factory.build(spec=spec, d_model=d_model).to(self.device)
+            model = self.factory.build(
+                spec=spec,
+                d_model=d_model,
+                node_count=node_count,
+                query_arity=query_arity,
+            ).to(self.device)
             self._fit(model=model, features=train_features)
             train_evaluation = self._evaluate(model=model, features=train_features)
             test_evaluation = self._evaluate(
@@ -73,6 +81,7 @@ class ProbeTrainer:
                     run_seed=self.config.seed,
                     layer_index=train_features.layer_index,
                     probe_name=spec.name,
+                    probe_family=spec.family,
                     variant_name=train_features.variant_name,
                     model=model,
                     train_accuracy=train_evaluation.accuracy,
@@ -163,11 +172,27 @@ class ProbeTrainer:
         grouped: dict[tuple[str, str], list[tuple[int, int]]] = {}
         for index, (prediction, label) in enumerate(zip(predictions.tolist(), labels.tolist(), strict=True)):
             grouped.setdefault(
+                ("relation_id", features.relation_ids[index]),
+                [],
+            ).append((prediction, label))
+            grouped.setdefault(
                 ("template_id", features.template_ids[index]),
                 [],
             ).append((prediction, label))
             grouped.setdefault(
                 ("template_family_id", features.template_family_ids[index]),
+                [],
+            ).append((prediction, label))
+            grouped.setdefault(
+                ("query_distance_type", features.query_distance_types[index]),
+                [],
+            ).append((prediction, label))
+            grouped.setdefault(
+                ("query_direction_type", features.query_direction_types[index]),
+                [],
+            ).append((prediction, label))
+            grouped.setdefault(
+                ("query_type", features.query_types[index]),
                 [],
             ).append((prediction, label))
 

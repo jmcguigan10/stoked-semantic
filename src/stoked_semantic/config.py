@@ -18,6 +18,30 @@ DEFAULT_TEMPLATE_IDS = (
     "above_reverse",
     "below_forward",
     "below_reverse",
+    "paraphrase_ab_inverse",
+    "paraphrase_ab_inverse_reverse",
+    "paraphrase_bc_inverse",
+    "paraphrase_bc_inverse_reverse",
+)
+FACTORIZED_TRAIN_TEMPLATE_IDS = (
+    "active_forward",
+    "passive_reverse",
+    "mixed_ab_inverse",
+    "mixed_bc_inverse_reverse",
+    "above_forward",
+    "below_reverse",
+    "paraphrase_ab_inverse",
+    "paraphrase_bc_inverse_reverse",
+)
+FACTORIZED_TEST_TEMPLATE_IDS = (
+    "active_reverse",
+    "passive_forward",
+    "mixed_ab_inverse_reverse",
+    "mixed_bc_inverse",
+    "above_reverse",
+    "below_forward",
+    "paraphrase_ab_inverse_reverse",
+    "paraphrase_bc_inverse",
 )
 BALANCED_TRAIN_TEMPLATE_IDS = (
     "active_forward",

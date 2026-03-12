@@ -157,6 +157,26 @@ TEMPLATE_LIBRARY: dict[str, TemplateSpec] = {
         template_family_id="below",
         template="{c} {paraphrase_inverse_relation} {b}. {b} {paraphrase_inverse_relation} {a}.",
     ),
+    "paraphrase_ab_inverse": TemplateSpec(
+        template_id="paraphrase_ab_inverse",
+        template_family_id="paraphrase_ab_inverse",
+        template="{b} {paraphrase_inverse_relation} {a}. {b} {paraphrase_relation} {c}.",
+    ),
+    "paraphrase_ab_inverse_reverse": TemplateSpec(
+        template_id="paraphrase_ab_inverse_reverse",
+        template_family_id="paraphrase_ab_inverse",
+        template="{b} {paraphrase_relation} {c}. {b} {paraphrase_inverse_relation} {a}.",
+    ),
+    "paraphrase_bc_inverse": TemplateSpec(
+        template_id="paraphrase_bc_inverse",
+        template_family_id="paraphrase_bc_inverse",
+        template="{a} {paraphrase_relation} {b}. {c} {paraphrase_inverse_relation} {b}.",
+    ),
+    "paraphrase_bc_inverse_reverse": TemplateSpec(
+        template_id="paraphrase_bc_inverse_reverse",
+        template_family_id="paraphrase_bc_inverse",
+        template="{c} {paraphrase_inverse_relation} {b}. {a} {paraphrase_relation} {b}.",
+    ),
 }
 
 

@@ -73,10 +73,11 @@ The diagnostics are separate from prediction:
 The dataset supports three useful evaluation regimes:
 
 - default: train and test can share templates
+- `--factorized-template-holdout`: disjoint structural template combinations while keeping both direct and inverse lexical realizations, both registers, and both clause orders on both sides
 - `--strict-template-holdout`: train on forward templates, test on reverse templates
 - `--balanced-template-holdout`: hold out template families while keeping both forward and reverse variants on both sides
 
-The balanced holdout is the recommended setting for phase 1. The strict holdout is intentionally harsh and is best treated as a stress test for polarity-flip failures.
+The factorized holdout is the recommended setting for the next sweep. The strict holdout is intentionally harsh and is best treated as a stress test for polarity-flip failures. The older balanced holdout is still useful for debugging, but it can still hide polarity-transfer artifacts on some template families.
 
 ## Running
 
@@ -86,11 +87,11 @@ Default run:
 python scripts/run_phase1.py
 ```
 
-Recommended balanced holdout with two relation families:
+Recommended factorized holdout with two relation families:
 
 ```bash
 python scripts/run_phase1.py \
-  --balanced-template-holdout \
+  --factorized-template-holdout \
   --relation-ids outranks older_than
 ```
 
@@ -99,7 +100,7 @@ Multi-seed run:
 ```bash
 python scripts/run_phase1.py \
   --seeds 7 11 13 17 19 \
-  --balanced-template-holdout \
+  --factorized-template-holdout \
   --relation-ids outranks older_than \
   --train-examples-per-label 600 \
   --test-examples-per-label 72 \
@@ -160,5 +161,6 @@ The current phase-1 evidence is methodologically useful but not yet supportive o
 - `pairwise` tends to beat `exact` slightly
 - `triadic` has not shown a robust advantage over `pairwise`
 - curl remains small in the most useful layers
+- the next useful test is a factorized structural holdout, not a larger encoder
 
 That makes this repo a good base for controlled follow-up experiments, but not evidence yet that genuine triadic structure is necessary.

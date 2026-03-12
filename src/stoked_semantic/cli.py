@@ -9,6 +9,8 @@ from stoked_semantic.config import (
     DEFAULT_FEATURE_CACHE_DIR,
     DEFAULT_RELATION_IDS,
     DEFAULT_TEMPLATE_IDS,
+    FACTORIZED_TEST_TEMPLATE_IDS,
+    FACTORIZED_TRAIN_TEMPLATE_IDS,
     STRICT_TEST_TEMPLATE_IDS,
     STRICT_TRAIN_TEMPLATE_IDS,
     DataConfig,
@@ -59,6 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         metavar="TEMPLATE",
         help=f"Template ids for test split. Available: {', '.join(available_template_ids())}",
+    )
+    parser.add_argument(
+        "--factorized-template-holdout",
+        action="store_true",
+        help=(
+            "Use complementary structural template combinations so train/test both contain "
+            "direct and inverse lexical realizations, both registers, and both clause orders."
+        ),
     )
     parser.add_argument(
         "--balanced-template-holdout",
@@ -140,8 +150,21 @@ def main() -> None:
 
 
 def _template_ids_from_args(args: argparse.Namespace) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if args.balanced_template_holdout and args.strict_template_holdout:
-        raise ValueError("Choose either --balanced-template-holdout or --strict-template-holdout, not both.")
+    selected_holdouts = [
+        args.factorized_template_holdout,
+        args.balanced_template_holdout,
+        args.strict_template_holdout,
+    ]
+    if sum(bool(flag) for flag in selected_holdouts) > 1:
+        raise ValueError(
+            "Choose at most one of --factorized-template-holdout, "
+            "--balanced-template-holdout, or --strict-template-holdout."
+        )
+
+    if args.factorized_template_holdout:
+        train_template_ids = tuple(args.train_template_ids or FACTORIZED_TRAIN_TEMPLATE_IDS)
+        test_template_ids = tuple(args.test_template_ids or FACTORIZED_TEST_TEMPLATE_IDS)
+        return train_template_ids, test_template_ids
 
     if args.balanced_template_holdout:
         train_template_ids = tuple(args.train_template_ids or BALANCED_TRAIN_TEMPLATE_IDS)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +13,7 @@ from stoked_semantic.data import SyntheticConsistencyDatasetBuilder
 from stoked_semantic.diagnostics import DiagnosticAnalyzer, DiagnosticSummary
 from stoked_semantic.encoding import EncodedSplit, TransformerFeatureExtractor
 from stoked_semantic.reporting import ReportWriter
-from stoked_semantic.training import ProbeRunResult, ProbeTrainer
+from stoked_semantic.training import GroupEvaluation, ProbeRunResult, ProbeTrainer
 from stoked_semantic.utils import set_seed
 
 
@@ -147,26 +149,18 @@ class MultiSeedPhaseOnePipeline:
     def run(self) -> dict[str, Any]:
         artifacts_by_seed: list[PhaseOneRunArtifacts] = []
         for run_seed in tqdm(self.run_seeds, desc="seeds"):
+            existing = self._load_completed_seed(run_seed=run_seed)
+            if existing is not None:
+                artifacts_by_seed.append(existing)
+                self._write_aggregate_from_artifacts(artifacts_by_seed)
+                continue
+
             seed_config = self._seed_config(run_seed=run_seed)
             pipeline = PhaseOnePipeline(config=seed_config)
-            artifacts_by_seed.append(pipeline.run())
+            artifacts = pipeline.run()
+            artifacts_by_seed.append(artifacts)
+            self._write_aggregate_from_artifacts(artifacts_by_seed)
 
-        probe_results = [
-            result
-            for artifacts in artifacts_by_seed
-            for result in artifacts.probe_results
-        ]
-        diagnostics = [
-            summary
-            for artifacts in artifacts_by_seed
-            for summary in artifacts.diagnostic_results
-        ]
-        self.reporter.write_aggregate(
-            probe_results=probe_results,
-            diagnostics=diagnostics,
-            run_summaries=[artifacts.summary() for artifacts in artifacts_by_seed],
-            metadata=self._metadata(),
-        )
         return {
             "mode": "multi_seed",
             "run_seeds": list(self.run_seeds),
@@ -174,8 +168,8 @@ class MultiSeedPhaseOnePipeline:
             "train_examples_per_run": artifacts_by_seed[0].train_examples if artifacts_by_seed else 0,
             "test_examples_per_run": artifacts_by_seed[0].test_examples if artifacts_by_seed else 0,
             "variants_per_run": artifacts_by_seed[0].variants if artifacts_by_seed else 0,
-            "total_probe_runs": len(probe_results),
-            "total_diagnostic_runs": len(diagnostics),
+            "total_probe_runs": sum(len(artifacts.probe_results) for artifacts in artifacts_by_seed),
+            "total_diagnostic_runs": sum(len(artifacts.diagnostic_results) for artifacts in artifacts_by_seed),
             "output_dir": str(self.config.report.output_dir),
         }
 
@@ -203,3 +197,107 @@ class MultiSeedPhaseOnePipeline:
             "test_template_ids": list(self.config.data.test_template_ids),
             "output_dir": str(self.config.report.output_dir),
         }
+
+    def _write_aggregate_from_artifacts(
+        self,
+        artifacts_by_seed: list[PhaseOneRunArtifacts],
+    ) -> None:
+        if not artifacts_by_seed:
+            return
+        probe_results = [
+            result
+            for artifacts in artifacts_by_seed
+            for result in artifacts.probe_results
+        ]
+        diagnostics = [
+            summary
+            for artifacts in artifacts_by_seed
+            for summary in artifacts.diagnostic_results
+        ]
+        self.reporter.write_aggregate(
+            probe_results=probe_results,
+            diagnostics=diagnostics,
+            run_summaries=[artifacts.summary() for artifacts in artifacts_by_seed],
+            metadata=self._metadata(),
+        )
+
+    def _load_completed_seed(self, run_seed: int) -> PhaseOneRunArtifacts | None:
+        output_dir = self.config.report.output_dir / f"seed_{run_seed}"
+        required = (
+            output_dir / "summary.json",
+            output_dir / "probe_accuracy_by_layer.csv",
+            output_dir / "diagnostics_by_layer.csv",
+            output_dir / "template_group_accuracy_by_layer.csv",
+        )
+        if not all(path.exists() for path in required):
+            return None
+
+        summary_payload = json.loads((output_dir / "summary.json").read_text())
+        metadata = summary_payload.get("metadata", {})
+
+        group_rows = list(csv.DictReader((output_dir / "template_group_accuracy_by_layer.csv").open()))
+        group_lookup: dict[tuple[int, str, int, str], list[GroupEvaluation]] = {}
+        for row in group_rows:
+            key = (
+                int(row["run_seed"]),
+                row["variant_name"],
+                int(row["layer_index"]),
+                row["probe_name"],
+            )
+            group_lookup.setdefault(key, []).append(
+                GroupEvaluation(
+                    group_type=row["group_type"],
+                    group_name=row["group_name"],
+                    example_count=int(float(row["example_count"])),
+                    accuracy=float(row["test_accuracy"]),
+                    polarity_invariant_accuracy=float(row["test_accuracy_polarity_invariant"]),
+                )
+            )
+
+        probe_results: list[ProbeRunResult] = []
+        for row in csv.DictReader((output_dir / "probe_accuracy_by_layer.csv").open()):
+            key = (
+                int(row["run_seed"]),
+                row["variant_name"],
+                int(row["layer_index"]),
+                row["probe_name"],
+            )
+            probe_results.append(
+                ProbeRunResult(
+                    run_seed=int(row["run_seed"]),
+                    layer_index=int(row["layer_index"]),
+                    probe_name=row["probe_name"],
+                    variant_name=row["variant_name"],
+                    model=None,  # loaded runs only need metrics for aggregation
+                    train_accuracy=float(row["train_accuracy"]),
+                    test_accuracy=float(row["test_accuracy"]),
+                    test_accuracy_polarity_invariant=float(row["test_accuracy_polarity_invariant"]),
+                    test_group_evaluations=tuple(group_lookup.get(key, ())),
+                    num_parameters=int(float(row["num_parameters"])),
+                    rank=int(float(row["rank"])),
+                )
+            )
+
+        diagnostic_results = [
+            DiagnosticSummary(
+                run_seed=int(row["run_seed"]),
+                layer_index=int(row["layer_index"]),
+                probe_name=row["probe_name"],
+                variant_name=row["variant_name"],
+                exactness_mean=float(row["exactness_mean"]),
+                curl_energy_mean=float(row["curl_energy_mean"]),
+                exactness_positional_mean=float(row["exactness_positional_mean"]),
+                curl_energy_positional_mean=float(row["curl_energy_positional_mean"]),
+            )
+            for row in csv.DictReader((output_dir / "diagnostics_by_layer.csv").open())
+        ]
+
+        return PhaseOneRunArtifacts(
+            run_seed=run_seed,
+            output_dir=output_dir,
+            train_examples=int(metadata.get("train_examples", 0)),
+            test_examples=int(metadata.get("test_examples", 0)),
+            variants=int(metadata.get("variants", 0)),
+            probe_results=probe_results,
+            diagnostic_results=diagnostic_results,
+        )

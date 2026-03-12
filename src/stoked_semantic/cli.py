@@ -13,6 +13,8 @@ from stoked_semantic.config import (
     FACTORIZED_TRAIN_TEMPLATE_IDS,
     STRICT_TEST_TEMPLATE_IDS,
     STRICT_TRAIN_TEMPLATE_IDS,
+    STRUCTURAL_TEST_TEMPLATE_IDS,
+    STRUCTURAL_TRAIN_TEMPLATE_IDS,
     DataConfig,
     EncoderConfig,
     ExperimentConfig,
@@ -61,6 +63,14 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         metavar="TEMPLATE",
         help=f"Template ids for test split. Available: {', '.join(available_template_ids())}",
+    )
+    parser.add_argument(
+        "--structural-template-holdout",
+        action="store_true",
+        help=(
+            "Use a structural holdout that keeps active/passive, above/below, and base mixed families "
+            "on both sides while dropping the paraphrase-mixed inverse families."
+        ),
     )
     parser.add_argument(
         "--factorized-template-holdout",
@@ -151,15 +161,22 @@ def main() -> None:
 
 def _template_ids_from_args(args: argparse.Namespace) -> tuple[tuple[str, ...], tuple[str, ...]]:
     selected_holdouts = [
+        args.structural_template_holdout,
         args.factorized_template_holdout,
         args.balanced_template_holdout,
         args.strict_template_holdout,
     ]
     if sum(bool(flag) for flag in selected_holdouts) > 1:
         raise ValueError(
-            "Choose at most one of --factorized-template-holdout, "
-            "--balanced-template-holdout, or --strict-template-holdout."
+            "Choose at most one of --structural-template-holdout, "
+            "--factorized-template-holdout, --balanced-template-holdout, "
+            "or --strict-template-holdout."
         )
+
+    if args.structural_template_holdout:
+        train_template_ids = tuple(args.train_template_ids or STRUCTURAL_TRAIN_TEMPLATE_IDS)
+        test_template_ids = tuple(args.test_template_ids or STRUCTURAL_TEST_TEMPLATE_IDS)
+        return train_template_ids, test_template_ids
 
     if args.factorized_template_holdout:
         train_template_ids = tuple(args.train_template_ids or FACTORIZED_TRAIN_TEMPLATE_IDS)

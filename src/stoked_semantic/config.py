@@ -23,6 +23,22 @@ DEFAULT_TEMPLATE_IDS = (
     "paraphrase_bc_inverse",
     "paraphrase_bc_inverse_reverse",
 )
+STRUCTURAL_TRAIN_TEMPLATE_IDS = (
+    "active_forward",
+    "passive_reverse",
+    "mixed_ab_inverse",
+    "mixed_bc_inverse_reverse",
+    "above_forward",
+    "below_reverse",
+)
+STRUCTURAL_TEST_TEMPLATE_IDS = (
+    "active_reverse",
+    "passive_forward",
+    "mixed_ab_inverse_reverse",
+    "mixed_bc_inverse",
+    "above_reverse",
+    "below_forward",
+)
 FACTORIZED_TRAIN_TEMPLATE_IDS = (
     "active_forward",
     "passive_reverse",

@@ -73,11 +73,12 @@ The diagnostics are separate from prediction:
 The dataset supports three useful evaluation regimes:
 
 - default: train and test can share templates
+- `--structural-template-holdout`: recommended next sweep; keeps active/passive, above/below, and base mixed families on both sides while dropping the paraphrase-mixed inverse families
 - `--factorized-template-holdout`: disjoint structural template combinations while keeping both direct and inverse lexical realizations, both registers, and both clause orders on both sides
 - `--strict-template-holdout`: train on forward templates, test on reverse templates
 - `--balanced-template-holdout`: hold out template families while keeping both forward and reverse variants on both sides
 
-The factorized holdout is the recommended setting for the next sweep. The strict holdout is intentionally harsh and is best treated as a stress test for polarity-flip failures. The older balanced holdout is still useful for debugging, but it can still hide polarity-transfer artifacts on some template families.
+The structural holdout is the recommended setting for the next sweep. The factorized holdout is still useful as a diagnostic stress test, but the paraphrase-mixed inverse templates have been the main remaining source of polarity instability. The strict holdout is intentionally harsh and is best treated as a stress test for polarity-flip failures. The older balanced holdout is still useful for debugging, but it can still hide polarity-transfer artifacts on some template families.
 
 ## Running
 
@@ -87,11 +88,11 @@ Default run:
 python scripts/run_phase1.py
 ```
 
-Recommended factorized holdout with two relation families:
+Recommended structural holdout with two relation families:
 
 ```bash
 python scripts/run_phase1.py \
-  --factorized-template-holdout \
+  --structural-template-holdout \
   --relation-ids outranks older_than
 ```
 
@@ -100,7 +101,7 @@ Multi-seed run:
 ```bash
 python scripts/run_phase1.py \
   --seeds 7 11 13 17 19 \
-  --factorized-template-holdout \
+  --structural-template-holdout \
   --relation-ids outranks older_than \
   --train-examples-per-label 600 \
   --test-examples-per-label 72 \
@@ -113,7 +114,7 @@ python scripts/run_phase1.py \
 Summarize a completed run:
 
 ```bash
-python scripts/summarize_phase1.py results/phase1_balanced
+python scripts/summarize_phase1.py results/phase1_structural
 ```
 
 ## Outputs
@@ -161,6 +162,6 @@ The current phase-1 evidence is methodologically useful but not yet supportive o
 - `pairwise` tends to beat `exact` slightly
 - `triadic` has not shown a robust advantage over `pairwise`
 - curl remains small in the most useful layers
-- the next useful test is a factorized structural holdout, not a larger encoder
+- the next useful test is a structural holdout with resumable multi-seed aggregation, not a larger encoder
 
 That makes this repo a good base for controlled follow-up experiments, but not evidence yet that genuine triadic structure is necessary.

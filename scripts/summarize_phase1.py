@@ -34,6 +34,17 @@ def main() -> None:
         result_dir / "template_group_accuracy_by_layer.csv",
     )
 
+    if probe_path is None:
+        probe_rows = _seed_rows(result_dir=result_dir, filename="probe_accuracy_by_layer.csv")
+        if not probe_rows:
+            raise FileNotFoundError(f"No probe results found under {result_dir}")
+        _print_probe_summary(probe_rows, aggregated=False)
+
+        group_rows = _seed_rows(result_dir=result_dir, filename="template_group_accuracy_by_layer.csv")
+        if group_rows:
+            _print_group_summary(group_rows, aggregated=False)
+        return
+
     probe_rows = list(csv.DictReader(probe_path.open()))
     aggregated = "test_accuracy_mean" in probe_rows[0]
     _print_probe_summary(probe_rows, aggregated=aggregated)
@@ -144,6 +155,16 @@ def _existing(*paths: Path) -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def _seed_rows(result_dir: Path, filename: str) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for seed_dir in sorted(result_dir.glob("seed_*")):
+        path = seed_dir / filename
+        if not path.exists():
+            continue
+        rows.extend(csv.DictReader(path.open()))
+    return rows
 
 
 def _mean(values: list[float] | tuple[float, ...] | object) -> float:

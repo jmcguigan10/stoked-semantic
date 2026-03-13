@@ -10,10 +10,12 @@ The codebase is deliberately small. It generates synthetic premise-query dataset
 
 - A controlled synthetic dataset with lexical holdout and configurable template holdouts
 - Frozen-feature extraction from `bert-base-uncased`
-- Five probe families:
+- Seven probe families:
   - `query_only`
   - `exact`
   - `pairwise`
+  - `pairwise_plus_query_context`
+  - `pairwise_plus_triplet_mlp`
   - `pairwise_plus_triadic`
   - `triadic`
 - Layerwise diagnostics for exactness and curl on both learned edge fields and raw hidden-state edge constructions
@@ -29,7 +31,7 @@ src/stoked_semantic/
   config.py       Experiment configuration
   data.py         Synthetic premise-query dataset builder
   encoding.py     Frozen encoder feature extraction and caching
-  probes.py       Query-only, exact, pairwise, and triadic probes
+  probes.py       Query-only, exact, pairwise, residual, and triadic probes
   training.py     Probe training and evaluation
   diagnostics.py  Exactness and curl metrics
   reporting.py    CSV/JSON outputs and plots
@@ -63,7 +65,9 @@ The main comparison is:
 
 - `exact`: forces queried predictions to come from node potentials
 - `pairwise`: uses a flexible queried edge encoder
-- `pairwise_plus_triadic`: adds a triadic residual on top of the same pairwise branch
+- `pairwise_plus_query_context`: adds the same whole-query linear context path used by the higher-order probes, but no multiplicative interaction
+- `pairwise_plus_triplet_mlp`: adds a matched-capacity nonlinear tuple residual on top of the same pairwise branch
+- `pairwise_plus_triadic`: adds a multiplicative triadic residual on top of the same pairwise branch
 - `triadic`: adds a genuine three-node interaction
 
 The exact probe can now also be swept over multiple ranks with `--exact-ranks` to test whether the task is close to a scalar or low-rank latent order.

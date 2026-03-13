@@ -127,6 +127,8 @@ def _print_probe_summary(rows: list[dict[str, str]], aggregated: bool) -> None:
             )
 
         pairwise_rows = by_probe.get("pairwise")
+        pairwise_plus_query_context_rows = by_probe.get("pairwise_plus_query_context")
+        pairwise_plus_triplet_mlp_rows = by_probe.get("pairwise_plus_triplet_mlp")
         pairwise_plus_triadic_rows = by_probe.get("pairwise_plus_triadic")
         triadic_rows = by_probe.get("triadic")
         if exact_family_rows and pairwise_rows and triadic_rows:
@@ -146,6 +148,26 @@ def _print_probe_summary(rows: list[dict[str, str]], aggregated: bool) -> None:
                 )
             )
             line = f"    avg gaps: pairwise-best_exact={pair_exact_gap:+.4f} triadic-pairwise={tri_pair_gap:+.4f}"
+            if pairwise_plus_query_context_rows:
+                pair_ctx_pair_gap = _mean(
+                    float(pc[raw_key]) - float(p[raw_key])
+                    for pc, p in zip(
+                        sorted(pairwise_plus_query_context_rows, key=lambda row: int(row["layer_index"])),
+                        sorted(pairwise_rows, key=lambda row: int(row["layer_index"])),
+                        strict=True,
+                    )
+                )
+                line += f" pair+ctx-pairwise={pair_ctx_pair_gap:+.4f}"
+            if pairwise_plus_triplet_mlp_rows and pairwise_plus_query_context_rows:
+                pair_mlp_ctx_gap = _mean(
+                    float(pm[raw_key]) - float(pc[raw_key])
+                    for pm, pc in zip(
+                        sorted(pairwise_plus_triplet_mlp_rows, key=lambda row: int(row["layer_index"])),
+                        sorted(pairwise_plus_query_context_rows, key=lambda row: int(row["layer_index"])),
+                        strict=True,
+                    )
+                )
+                line += f" pair+mlp-pair+ctx={pair_mlp_ctx_gap:+.4f}"
             if pairwise_plus_triadic_rows:
                 pair_tri_pair_gap = _mean(
                     float(pt[raw_key]) - float(p[raw_key])
@@ -155,6 +177,18 @@ def _print_probe_summary(rows: list[dict[str, str]], aggregated: bool) -> None:
                         strict=True,
                     )
                 )
+                line += f" pair+triadic-pairwise={pair_tri_pair_gap:+.4f}"
+            if pairwise_plus_triadic_rows and pairwise_plus_triplet_mlp_rows:
+                pair_tri_mlp_gap = _mean(
+                    float(pt[raw_key]) - float(pm[raw_key])
+                    for pt, pm in zip(
+                        sorted(pairwise_plus_triadic_rows, key=lambda row: int(row["layer_index"])),
+                        sorted(pairwise_plus_triplet_mlp_rows, key=lambda row: int(row["layer_index"])),
+                        strict=True,
+                    )
+                )
+                line += f" pair+triadic-pair+mlp={pair_tri_mlp_gap:+.4f}"
+            if pairwise_plus_triadic_rows:
                 tri_pair_tri_gap = _mean(
                     float(t[raw_key]) - float(pt[raw_key])
                     for t, pt in zip(
@@ -163,10 +197,7 @@ def _print_probe_summary(rows: list[dict[str, str]], aggregated: bool) -> None:
                         strict=True,
                     )
                 )
-                line += (
-                    f" pair+triadic-pairwise={pair_tri_pair_gap:+.4f}"
-                    f" triadic-pair+triadic={tri_pair_tri_gap:+.4f}"
-                )
+                line += f" triadic-pair+triadic={tri_pair_tri_gap:+.4f}"
             print(line)
         elif exact_family_rows and pairwise_rows:
             exact_by_layer: dict[int, list[float]] = defaultdict(list)
@@ -177,6 +208,26 @@ def _print_probe_summary(rows: list[dict[str, str]], aggregated: bool) -> None:
                 for row in sorted(pairwise_rows, key=lambda row: int(row["layer_index"]))
             )
             line = f"    avg gap vs best exact@layer: pairwise-best_exact={pair_exact_gap:+.4f}"
+            if pairwise_plus_query_context_rows:
+                pair_ctx_pair_gap = _mean(
+                    float(pc[raw_key]) - float(p[raw_key])
+                    for pc, p in zip(
+                        sorted(pairwise_plus_query_context_rows, key=lambda row: int(row["layer_index"])),
+                        sorted(pairwise_rows, key=lambda row: int(row["layer_index"])),
+                        strict=True,
+                    )
+                )
+                line += f" pair+ctx-pairwise={pair_ctx_pair_gap:+.4f}"
+            if pairwise_plus_triplet_mlp_rows and pairwise_plus_query_context_rows:
+                pair_mlp_ctx_gap = _mean(
+                    float(pm[raw_key]) - float(pc[raw_key])
+                    for pm, pc in zip(
+                        sorted(pairwise_plus_triplet_mlp_rows, key=lambda row: int(row["layer_index"])),
+                        sorted(pairwise_plus_query_context_rows, key=lambda row: int(row["layer_index"])),
+                        strict=True,
+                    )
+                )
+                line += f" pair+mlp-pair+ctx={pair_mlp_ctx_gap:+.4f}"
             if pairwise_plus_triadic_rows:
                 pair_tri_pair_gap = _mean(
                     float(pt[raw_key]) - float(p[raw_key])
@@ -342,15 +393,19 @@ def _probe_sort_key(probe_name: str) -> tuple[int, int, str]:
         return (1, 0, probe_name)
     if probe_name == "pairwise":
         return (2, 0, probe_name)
-    if probe_name == "pairwise_plus_triadic":
+    if probe_name == "pairwise_plus_query_context":
         return (3, 0, probe_name)
-    if probe_name == "triadic":
+    if probe_name == "pairwise_plus_triplet_mlp":
         return (4, 0, probe_name)
-    if probe_name.startswith("raw_projection"):
+    if probe_name == "pairwise_plus_triadic":
         return (5, 0, probe_name)
-    if probe_name.startswith("raw_skew_bilinear"):
+    if probe_name == "triadic":
         return (6, 0, probe_name)
-    return (7, 0, probe_name)
+    if probe_name.startswith("raw_projection"):
+        return (7, 0, probe_name)
+    if probe_name.startswith("raw_skew_bilinear"):
+        return (8, 0, probe_name)
+    return (9, 0, probe_name)
 
 
 def _rank_from_probe_name(probe_name: str) -> int:

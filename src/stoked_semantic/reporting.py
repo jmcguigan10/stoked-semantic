@@ -27,6 +27,8 @@ SERIES_COLORS = {
     ("pretrained", "query_only"): CYBER_COLORS["gray"],
     ("pretrained", "exact"): CYBER_COLORS["cyan"],
     ("pretrained", "pairwise"): CYBER_COLORS["magenta"],
+    ("pretrained", "pairwise_plus_query_context"): CYBER_COLORS["orange"],
+    ("pretrained", "pairwise_plus_triplet_mlp"): CYBER_COLORS["violet"],
     ("pretrained", "pairwise_plus_triadic"): CYBER_COLORS["lime"],
     ("pretrained", "triadic"): CYBER_COLORS["gold"],
     ("pretrained", "raw_projection"): CYBER_COLORS["orange"],
@@ -34,6 +36,8 @@ SERIES_COLORS = {
     ("random_control", "query_only"): "#4D5560",
     ("random_control", "exact"): CYBER_COLORS["lime"],
     ("random_control", "pairwise"): CYBER_COLORS["orange"],
+    ("random_control", "pairwise_plus_query_context"): "#FFB25A",
+    ("random_control", "pairwise_plus_triplet_mlp"): "#B094FF",
     ("random_control", "pairwise_plus_triadic"): "#7CFFB2",
     ("random_control", "triadic"): CYBER_COLORS["violet"],
     ("random_control", "raw_projection"): "#9C5A00",
@@ -759,6 +763,14 @@ class ReportWriter:
             return {"linestyle": (0, (2, 1.2))}
         if probe_name.startswith("raw_skew_bilinear"):
             return {"linestyle": (0, (6, 1.5))}
+        if probe_name == "pairwise_plus_query_context":
+            return {"linestyle": (0, (4, 1.25))}
+        if probe_name == "pairwise_plus_triplet_mlp":
+            return {"linestyle": (0, (2.5, 1.2))}
+        if probe_name == "pairwise_plus_triadic":
+            return {"linestyle": (0, (7, 1.4))}
+        if probe_name == "triadic":
+            return {"linestyle": (0, (9, 1.6))}
         if not probe_name.startswith("exact_r"):
             return {"linestyle": "-"}
         rank = ReportWriter._probe_rank(probe_name)

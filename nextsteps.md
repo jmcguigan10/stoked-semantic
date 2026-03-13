@@ -37,21 +37,29 @@ The repo now supports a clearer phased story than it did originally.
 
 ## Immediate Priorities
 
-### 1. Tighten phase-4 negatives
+### 1. Fair residual controls on phase 4
 
-Goal:
-- make the negative masked cases as pairwise-matched as the hidden-positive cases
-- reduce the current pattern where `pairwise` still holds up better on negatives than on hidden positives
+This is now implemented.
 
-Implementation direction:
-- restrict negative visible subsets to the same binary query-pair support regime as hidden positives
-- match negative subset support signatures to the positive hidden-signature distribution
-- rerun the phase-4 multi-seed sweep after the matched-negative change
+New controls:
+- `pairwise_plus_query_context`: same pairwise branch plus whole-query linear context, but no multiplicative term
+- `pairwise_plus_triplet_mlp`: same pairwise branch plus a matched-capacity nonlinear tuple residual
+
+Why they matter:
+- they separate three explanations that were previously entangled:
+  - extra query context
+  - extra nonlinear tuple capacity
+  - specifically multiplicative triadic structure
+
+Immediate next run:
+- rerun the validated phase-4 matched-negative setup on `bert-base-uncased`
+- then rerun the same comparison on `bert-large-uncased`
+- compare `pairwise`, `pairwise_plus_query_context`, `pairwise_plus_triplet_mlp`, `pairwise_plus_triadic`, and `triadic`
 
 Success condition:
-- higher-order probes keep their edge over `pairwise`
-- the edge remains pretrained-specific
-- the negative masked cases stop being the main failure mode
+- `pairwise_plus_triadic` stays above `pairwise_plus_query_context`
+- `pairwise_plus_triadic` stays above `pairwise_plus_triplet_mlp`
+- the gap is larger in pretrained than in random control
 
 ### 2. Raw hidden-state diagnostics
 
@@ -67,16 +75,20 @@ Still missing:
 Decision gate:
 - if the raw skew-bilinear diagnostics track the probe story, the higher-order interpretation becomes much stronger
 
-### 3. Only then decide on scale-up
+### 3. Only then decide on broader scale-up
 
 This gate is now passed for the current phase-4 matched-negative setup:
 - the refined phase-4 masked sweep still shows `triadic` or `pairwise_plus_triadic` beating `pairwise`
 - the raw diagnostics show a consistent pretrained-specific non-exact / higher-order signal
 
+Current scale-up status:
+- a 3-seed `bert-large-uncased` pilot already improved the masked ternary result
+- one-seed random control looked promising, and seeds `11`/`13` kept the higher-order edge pretrained-side
+
 Current scale-up plan:
-- run a 3-seed `bert-large-uncased` pilot on the same masked ternary structural holdout
+- finish the fair-control reruns on `bert-base-uncased`
+- then run one canonical `bert-large-uncased` bundle with pretrained and random control together
 - keep the exact-rank sweep and raw diagnostics unchanged
-- default to pretrained-only first, then add random control only if the large-model effect looks promising
 
 Decision questions:
 - does the higher-order margin widen or stabilize relative to `bert-base-uncased`?
@@ -85,10 +97,10 @@ Decision questions:
 
 ## Practical Sequence
 
-1. Run the 3-seed `bert-large-uncased` phase-4 pilot.
-2. Compare `bert-large` against the current `bert-base` phase-4 matched-negative run.
-3. Decide whether the remaining `balanced_align` weakness is task geometry or representation geometry.
-4. If the large-model margin is real, add a random-control large-model check.
+1. Rerun the clean phase-4 matched-negative setup on `bert-base-uncased` with the new residual controls.
+2. Compare context-only, generic tuple-MLP, triadic-residual, and standalone triadic probes.
+3. Run one canonical `bert-large-uncased` bundle with pretrained and random control together.
+4. Decide whether the remaining `balanced_align` weakness is task geometry or representation geometry.
 5. Only then revisit attention-based analyses or broader model families.
 
 ## Decision Rule

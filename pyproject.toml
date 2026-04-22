@@ -5,10 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stoked-semantic"
 version = "0.1.0"
-description = "Phase 1 probing experiments for exact, pairwise, and triadic structure in transformer hidden states."
+description = "Controlled probing experiments for exact, pairwise, and higher-order relational structure in transformer hidden states."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "huggingface-hub>=0.35",
   "torch>=2.9",
   "transformers>=5.0.0",
   "numpy>=2.3",
@@ -17,6 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
+stoked-semantic = "stoked_semantic.cli:main"
 stoked-phase1 = "stoked_semantic.cli:main"
 
 [tool.setuptools.packages.find]

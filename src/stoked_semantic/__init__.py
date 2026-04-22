@@ -1,4 +1,4 @@
-"""Phase 1 semantic probing package."""
+"""Semantic probing experiments for exact, pairwise, and higher-order structure."""
 
 __all__ = ["__version__"]
 

@@ -37,11 +37,11 @@
     ],
     "pairwise_rank": 64,
     "triadic_rank": null,
-    "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_143919",
+    "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_143919",
     "run_summaries": [
       {
         "run_seed": 11,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_143919/seed_11",
+        "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_143919/seed_11",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,
@@ -50,7 +50,7 @@
       },
       {
         "run_seed": 13,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_143919/seed_13",
+        "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_143919/seed_13",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,

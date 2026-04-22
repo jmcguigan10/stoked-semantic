@@ -27,10 +27,10 @@ class PhaseOneRunArtifacts:
     probe_results: list[ProbeRunResult]
     diagnostic_results: list[DiagnosticSummary]
 
-    def summary(self) -> dict[str, Any]:
+    def summary(self, root_dir: Path | None = None) -> dict[str, Any]:
         return {
             "run_seed": self.run_seed,
-            "output_dir": str(self.output_dir),
+            "output_dir": _display_path(self.output_dir, root_dir),
             "train_examples": self.train_examples,
             "test_examples": self.test_examples,
             "variants": self.variants,
@@ -143,7 +143,7 @@ class PhaseOnePipeline:
             "exact_rank_sweep": list(self.config.probe.exact_rank_sweep),
             "pairwise_rank": self.config.probe.pairwise_rank,
             "triadic_rank": self.config.probe.triadic_rank,
-            "output_dir": str(self.config.report.output_dir),
+            "output_dir": _display_path(self.config.report.output_dir, self.config.root_dir),
         }
 
 
@@ -182,7 +182,7 @@ class MultiSeedPhaseOnePipeline:
             "variants_per_run": artifacts_by_seed[0].variants if artifacts_by_seed else 0,
             "total_probe_runs": sum(len(artifacts.probe_results) for artifacts in artifacts_by_seed),
             "total_diagnostic_runs": sum(len(artifacts.diagnostic_results) for artifacts in artifacts_by_seed),
-            "output_dir": str(self.config.report.output_dir),
+            "output_dir": _display_path(self.config.report.output_dir, self.config.root_dir),
         }
 
     def _seed_config(self, run_seed: int) -> ExperimentConfig:
@@ -213,7 +213,7 @@ class MultiSeedPhaseOnePipeline:
             "exact_rank_sweep": list(self.config.probe.exact_rank_sweep),
             "pairwise_rank": self.config.probe.pairwise_rank,
             "triadic_rank": self.config.probe.triadic_rank,
-            "output_dir": str(self.config.report.output_dir),
+            "output_dir": _display_path(self.config.report.output_dir, self.config.root_dir),
         }
 
     def _write_aggregate_from_artifacts(
@@ -235,7 +235,7 @@ class MultiSeedPhaseOnePipeline:
         self.reporter.write_aggregate(
             probe_results=probe_results,
             diagnostics=diagnostics,
-            run_summaries=[artifacts.summary() for artifacts in artifacts_by_seed],
+            run_summaries=[artifacts.summary(root_dir=self.config.root_dir) for artifacts in artifacts_by_seed],
             metadata=self._metadata(),
         )
 
@@ -321,6 +321,15 @@ class MultiSeedPhaseOnePipeline:
             probe_results=probe_results,
             diagnostic_results=diagnostic_results,
         )
+
+
+def _display_path(path: Path, root_dir: Path | None) -> str:
+    if root_dir is None:
+        return str(path)
+    try:
+        return str(path.relative_to(root_dir))
+    except ValueError:
+        return str(path)
 
 
 def _probe_family_from_name(probe_name: str) -> str:

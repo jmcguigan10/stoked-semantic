@@ -25,7 +25,7 @@
       "above_reverse",
       "below_forward"
     ],
-    "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase1_structural/seed_11"
+    "output_dir": "results/phase1_structural/seed_11"
   },
   "probe_results": [
     {

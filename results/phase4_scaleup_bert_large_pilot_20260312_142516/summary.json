@@ -36,11 +36,11 @@
     ],
     "pairwise_rank": 64,
     "triadic_rank": null,
-    "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_142516",
+    "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_142516",
     "run_summaries": [
       {
         "run_seed": 7,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_142516/seed_7",
+        "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_142516/seed_7",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,

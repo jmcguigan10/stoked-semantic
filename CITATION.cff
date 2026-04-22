@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+title: Stoked Semantic
+message: If you use this repository, please cite it using the metadata below.
+type: software
+authors:
+  - given-names: Johnny
+    family-names: McGuigan
+repository-code: https://github.com/jmcguigan10/stoked-semantic
+url: https://github.com/jmcguigan10/stoked-semantic
+abstract: Controlled probing experiments for exact, pairwise, and higher-order relational structure in frozen transformer hidden states.
+license: MIT
+version: 0.1.0
+date-released: 2026-04-22

@@ -40,11 +40,11 @@
     ],
     "pairwise_rank": 64,
     "triadic_rank": null,
-    "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base",
+    "output_dir": "results/phase4_controls_base",
     "run_summaries": [
       {
         "run_seed": 7,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base/seed_7",
+        "output_dir": "results/phase4_controls_base/seed_7",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,
@@ -53,7 +53,7 @@
       },
       {
         "run_seed": 11,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base/seed_11",
+        "output_dir": "results/phase4_controls_base/seed_11",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,
@@ -62,7 +62,7 @@
       },
       {
         "run_seed": 13,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base/seed_13",
+        "output_dir": "results/phase4_controls_base/seed_13",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,
@@ -71,7 +71,7 @@
       },
       {
         "run_seed": 17,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base/seed_17",
+        "output_dir": "results/phase4_controls_base/seed_17",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,
@@ -80,7 +80,7 @@
       },
       {
         "run_seed": 19,
-        "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_controls_base/seed_19",
+        "output_dir": "results/phase4_controls_base/seed_19",
         "train_examples": 1200,
         "test_examples": 144,
         "variants": 2,

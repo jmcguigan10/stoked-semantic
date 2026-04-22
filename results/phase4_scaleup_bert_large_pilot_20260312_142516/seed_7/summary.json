@@ -37,7 +37,7 @@
     ],
     "pairwise_rank": 64,
     "triadic_rank": null,
-    "output_dir": "/Users/johnny/Research/ml/stoked-semantic/results/phase4_scaleup_bert_large_pilot_20260312_142516/seed_7"
+    "output_dir": "results/phase4_scaleup_bert_large_pilot_20260312_142516/seed_7"
   },
   "probe_results": [
     {

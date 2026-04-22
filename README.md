@@ -1,5 +1,7 @@
 # Stoked Semantic
 
+The name is a play on Stokes' theorem: this project asks whether language-model semantics look more like exact, low-curl structure in a Stokes/Hodge sense or whether genuinely higher-order interactions are needed to explain them.
+
 Controlled probing experiments for testing whether frozen transformer hidden states are best described by exact node potentials, flexible pairwise relations, or genuinely higher-order interactions.
 
 This repository builds synthetic relational benchmarks, extracts frozen BERT-family features, trains matched probe families layer by layer, and reports both predictive accuracy and geometry diagnostics such as exactness and curl. The main result is deliberately narrow: higher-order structure does not win everywhere, but it does help on masked ternary completion after fair controls and held-out paraphrase transfer.

@@ -3,7 +3,7 @@ title: Stoked Semantic
 message: If you use this repository, please cite it using the metadata below.
 type: software
 authors:
-  - given-names: Johnny
+  - given-names: John
     family-names: McGuigan
 repository-code: https://github.com/jmcguigan10/stoked-semantic
 url: https://github.com/jmcguigan10/stoked-semantic
